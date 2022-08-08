@@ -1,3 +1,6 @@
+const path = require('path');
+const fs = require('fs');
+
 function getPublicUrlOrPath(isEnvDevelopment, envPublicUrl) {
     const stubDomain = 'https://create-react-app.dev';
     if (envPublicUrl) {
@@ -19,6 +22,14 @@ function getPublicUrlOrPath(isEnvDevelopment, envPublicUrl) {
     return '/';
 }
 
+const appDirectory = fs.realpathSync(process.cwd());
+
+const resolveApp = relativePath => path.resolve(appDirectory, relativePath);
+
 const publicPath = getPublicUrlOrPath(process.env.NODE_ENV === 'development', process.env.PUBLIC_URL);
 
-module.exports = {publicPath};
+module.exports = {
+  publicPath,
+  appSrc: resolveApp('src'),
+  appPath: resolveApp('.'),
+};

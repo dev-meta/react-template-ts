@@ -2,11 +2,15 @@ const webpack = require('webpack');
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const EslintWebpackPlugin = require("eslint-webpack-plugin");
 const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin');
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const CaseSensitivePathsPlugin = require('case-sensitive-paths-webpack-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 const InterpolateHtmlPlugin = require('interpolate-html-plugin');
 const path = require("path");
+const fs = require('fs');
+const paths = require('./config/paths');
 const dotenv = require('dotenv');
 const {expand} = require('dotenv-expand');
 const SpeedMeasureWebpackPlugin = require('speed-measure-webpack-plugin')
@@ -21,6 +25,93 @@ const measure = process.env.measure;
 const isEnvDevelopment = process.env.NODE_ENV === 'development';
 const isEnvProduction = process.env.NODE_ENV === 'production';
 const shouldUseSourceMap = process.env.GENERATE_SOURCEMAP !== 'false';
+
+// Check if Tailwind config exists
+const useTailwind = fs.existsSync(
+  path.join(paths.appPath, 'tailwind.config.js')
+);
+
+// common function to get style loaders
+const getStyleLoaders = (cssOptions, preProcessor) => {
+  const loaders = [
+    isEnvDevelopment && require.resolve('style-loader'),
+    isEnvProduction && {
+      loader: MiniCssExtractPlugin.loader,
+      // css is located in `static/css`, use '../../' to locate index.html folder
+      // in production `paths.publicUrlOrPath` can be a relative path
+      options: paths.publicPath.startsWith('.')
+        ? { publicPath: '../../' }
+        : {},
+    },
+    {
+      loader: require.resolve('css-loader'),
+      options: cssOptions,
+    },
+    {
+      // Options for PostCSS as we reference these options twice
+      // Adds vendor prefixing based on your specified browser support in
+      // package.json
+      loader: require.resolve('postcss-loader'),
+      options: {
+        postcssOptions: {
+          // Necessary for external CSS imports to work
+          // https://github.com/facebook/create-react-app/issues/2677
+          ident: 'postcss',
+          config: false,
+          plugins: !useTailwind
+            ? [
+                'postcss-flexbugs-fixes',
+                [
+                  'postcss-preset-env',
+                  {
+                    autoprefixer: {
+                      flexbox: 'no-2009',
+                    },
+                    stage: 3,
+                  },
+                ],
+                // Adds PostCSS Normalize as the reset css with default options,
+                // so that it honors browserslist config in package.json
+                // which in turn let's users customize the target behavior as per their needs.
+                'postcss-normalize',
+              ]
+            : [
+                'tailwindcss',
+                'postcss-flexbugs-fixes',
+                [
+                  'postcss-preset-env',
+                  {
+                    autoprefixer: {
+                      flexbox: 'no-2009',
+                    },
+                    stage: 3,
+                  },
+                ],
+              ],
+        },
+        sourceMap: isEnvProduction ? shouldUseSourceMap : isEnvDevelopment,
+      },
+    },
+  ].filter(Boolean);
+  if (preProcessor) {
+    loaders.push(
+      {
+        loader: require.resolve('resolve-url-loader'),
+        options: {
+          sourceMap: isEnvProduction ? shouldUseSourceMap : isEnvDevelopment,
+          root: paths.appSrc,
+        },
+      },
+      {
+        loader: require.resolve(preProcessor),
+        options: {
+          sourceMap: true,
+        },
+      }
+    );
+  }
+  return loaders;
+};
 
 const config = {
   entry: "./src/index",
@@ -87,7 +178,7 @@ const config = {
         },
       }),
       // This is only used in production mode
-      // new CssMinimizerPlugin(),
+      new CssMinimizerPlugin(),
     ],
   },
   devtool: isEnvProduction
@@ -173,62 +264,83 @@ const config = {
   module: {
     rules: [
       {
-        test: /\.(tsx?|jsx?)$/,
-        exclude: /(node_modules|bower_components)/,
-        use: {
-          // Use `.swcrc` to configure swc
-          loader: "swc-loader",
-          options: {
-            sync: true,
-            jsc: {
-              parser: {
-                syntax: "typescript",
-                tsx: true,
-                dynamicImport: false,
-                privateMethod: true,
-                functionBind: false,
-                exportDefaultFrom: true,
-                exportNamespaceFrom: false,
-                decorators: false,
-                decoratorsBeforeExport: false,
-                topLevelAwait: false,
-                importMeta: false,
-              },
-              transform: {
-                react: {
-                  refresh: isEnvDevelopment,
-                  development: isEnvDevelopment,
-                  runtime: "automatic",
-                  pragmaFrag: "React.Fragment",
-                  throwIfNamespace: true,
-                  // development 不设置 会自动读取webpack mode
-                  // development: false,
-                  // Use Object.assign() instead of _extends. Defaults to false.
-                  useBuiltins: false,
+        oneOf: [
+          {
+            test: /\.(tsx?|jsx?)$/,
+            exclude: /(node_modules|bower_components)/,
+            use: {
+              // Use `.swcrc` to configure swc
+              loader: "swc-loader",
+              options: {
+                sync: true,
+                jsc: {
+                  parser: {
+                    syntax: "typescript",
+                    tsx: true,
+                    dynamicImport: false,
+                    privateMethod: true,
+                    functionBind: false,
+                    exportDefaultFrom: true,
+                    exportNamespaceFrom: false,
+                    decorators: false,
+                    decoratorsBeforeExport: false,
+                    topLevelAwait: false,
+                    importMeta: false,
+                  },
+                  transform: {
+                    react: {
+                      refresh: isEnvDevelopment,
+                      development: isEnvDevelopment,
+                      runtime: "automatic",
+                      pragmaFrag: "React.Fragment",
+                      throwIfNamespace: true,
+                      // development 不设置 会自动读取webpack mode
+                      // development: false,
+                      // Use Object.assign() instead of _extends. Defaults to false.
+                      useBuiltins: false,
+                    },
+                  },
+                  target: "es5",
+                  loose: false,
+                  externalHelpers: false,
+                  // Requires v1.2.50 or upper and requires target to be es2016 or upper.
+                  keepClassNames: false,
                 },
               },
-              target: "es5",
-              loose: false,
-              externalHelpers: false,
-              // Requires v1.2.50 or upper and requires target to be es2016 or upper.
-              keepClassNames: false,
             },
           },
-        },
-      },
-      {
-        test: /.less/,
-        exclude: /node_modules/,
-        use: [
-          'style-loader',
-          'css-loader',
-          'postcss-loader',
-          'less-loader'
+          {
+            test: /\.css$/,
+            use: getStyleLoaders({
+              importLoaders: 1,
+              sourceMap: isEnvProduction
+                ? shouldUseSourceMap
+                : isEnvDevelopment,
+              modules: {
+                mode: 'local',
+                auto: true
+              }
+            })
+          },
+          {
+            test: /\.less/,
+            // exclude: /node_modules/,
+            use: getStyleLoaders({
+              importLoaders: 3,
+              sourceMap: isEnvProduction
+                ? shouldUseSourceMap
+                : isEnvDevelopment,
+              modules: {
+                mode: 'local',
+                auto: true
+              }
+            }, 'less-loader')
+          },
+          {
+            test: /\.(png|jpg|jpeg|gif)$/,
+            type: 'asset'
+          }
         ]
-      },
-      {
-        test: /\.(png|jpg|jpeg|gif)$/,
-        type: 'asset'
       }
     ],
   },
