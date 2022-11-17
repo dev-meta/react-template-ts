@@ -29,7 +29,8 @@ const resolveApp = relativePath => path.resolve(appDirectory, relativePath);
 const publicPath = getPublicUrlOrPath(process.env.NODE_ENV === 'development', process.env.PUBLIC_URL);
 
 module.exports = {
-  publicPath,
-  appSrc: resolveApp('src'),
-  appPath: resolveApp('.'),
+    publicPath,
+    appSrc: resolveApp('src'),
+    appPath: resolveApp('.'),
+    appNodeModules: resolveApp('node_modules')
 };
