@@ -191,7 +191,7 @@ const config = {
         },
     },
     plugins: [
-        new CaseSensitivePathsPlugin(),
+        isEnvDevelopment && new CaseSensitivePathsPlugin(),
         isEnvDevelopment && new ReactRefreshWebpackPlugin(),
         new HtmlWebpackPlugin(
             Object.assign(
